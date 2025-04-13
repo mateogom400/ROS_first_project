@@ -5,31 +5,29 @@
 #include <cmath>
 
 // Vehicle parameters
-const double WHEELBASE = 1.765; // Distance between front and rear wheels (meters)
-const double STEERING_FACTOR = 32.0; // Steering factor to convert steering wheel angle to wheel angle
+const double WHEELBASE = 1.765; // Front-to-rear wheel distance (meters)
+const double STEERING_FACTOR = 32.0; // Steering factor
 
 // Global variables for odometry computation
-double x = 0.0, y = 0.0, theta = 0.0; // Robot pose (x, y, orientation)
-ros::Time prev_time; // Previous timestamp for integration
+double x = 0.0, y = 0.0, theta = 0.0; // Pose (x, y, theta)
+ros::Time prev_time; // Previous timestamp
 
 void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
-    // Extract speed (km/h) and steering wheel angle (degrees) from the message
+    // Extract speed (km/h) and steering wheel angle (degrees)
     double speed_kmh = msg->point.y;
     double steering_wheel_angle_deg = msg->point.x;
 
-    // Convert speed to m/s
+    // Convert speed to m/s and steering angle to wheel angle
     double speed_mps = speed_kmh / 3.6;
-
-    // Convert steering wheel angle to wheel angle using steering factor
     double wheel_angle_rad = (steering_wheel_angle_deg / STEERING_FACTOR) * M_PI / 180.0;
 
-    // Compute angular velocity using the bicycle model
+    // Compute angular velocity (bicycle model)
     double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
 
-    // Get current time and compute time difference
+    // Calculate time difference
     ros::Time current_time = msg->header.stamp;
     if (prev_time.isZero()) {
-        prev_time = current_time; // Initialize previous time on first callback
+        prev_time = current_time;
         return;
     }
     double dt = (current_time - prev_time).toSec();
@@ -52,31 +50,36 @@ void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
     // Set position
     odom_msg.pose.pose.position.x = x;
     odom_msg.pose.pose.position.y = y;
-    odom_msg.pose.pose.position.z = 0.0; // Assuming flat terrain
+    odom_msg.pose.pose.position.z = 0.0; // 2D assumption
 
-    // Set orientation as quaternion
+    // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
+    tf::Quaternion tf_quat;
+    tf_quat.setRPY(0, 0, theta);
     geometry_msgs::Quaternion odom_quat;
-    odom_quat.x = 0.0;
-    odom_quat.y = 0.0;
-    odom_quat.z = sin(theta / 2.0);
-    odom_quat.w = cos(theta / 2.0);
+    tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
     odom_msg.pose.pose.orientation = odom_quat;
 
     // Set velocity
     odom_msg.twist.twist.linear.x = speed_mps;
-    odom_msg.twist.twist.linear.y = 0.0; // No lateral movement in nonholonomic model
     odom_msg.twist.twist.angular.z = angular_velocity;
 
     if (!odom_pub) {
         ros::NodeHandle nh;
         odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
     }
-    
     odom_pub.publish(odom_msg);
 
-    // Broadcast TF transform from "odom" to "vehicle"
+    // Broadcast TF transform (odom → vehicle)
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(x, y, 0.0));
-    
-	tf::Quaternion quat(tf::Vector3(0, theta));
-	tf_broadcaster.sendTransform(tf::StampedTransform(transform, ros:
+    transform.setRotation(tf_quat); // Reuse the same quaternion
+    tf_broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
+}
+
+int main(int argc, char** argv) {
+    ros::init(argc, argv, "odometer");
+    ros::NodeHandle nh;
+    ros::Subscriber sub = nh.subscribe("/speedsteer", 10, speedSteerCallback);
+    ros::spin();
+    return 0;
+}
