@@ -38,11 +38,12 @@ private:
     //sensor_msgs::NavSatFix rear_gps_msg_;
     tf::Quaternion tf_quat;
     tf::Transform transform;
+    ros::NodeHandle nh;
 public:
     FrontRearNode() {
         // Initialize subscribers and publishers
-        ros::NodeHandle nh;
         front_gps_sub_ = nh.subscribe("/swiftnav/front/gps_pose", 1, &FrontRearNode::frontGpsCallback, this);
+        odom_pub_ = nh.advertise<nav_msgs::Odometry>("/odom", 10);
         //rear_gps_sub_ = nh.subscribe("/swiftnav/rear/gps_pose", 1, &FrontRearNode::rearGpsCallback, this);
     }
 
@@ -62,20 +63,23 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
         double N = a / (sqrt(1 - e_squared * pow(sin(origin_latitude), 2)));
         x_origin = (N + origin_altitude) * cos(origin_latitude) * cos(origin_longitude);
         y_origin = (N + origin_altitude) * sin(origin_longitude) * cos(origin_latitude);
-        z_origin = (N * (1-e_squared) + origin_altitude) * sin(origin_latitude);
-        return;
+        z_origin = (N * (1-e_squared) + origin_altitude) * sin(origin_latitude)*0;
+        // return;
     }
 
     // Convert latitude-longitude to ECEF coordinates
     double N = a/(sqrt(1-e_squared*pow((sin(front_latitude)),2)));
     double x_ecef = (N + front_altitude) * cos(front_latitude) * cos(front_longitude);
     double y_ecef = (N + front_altitude) * sin(front_longitude) * cos(front_latitude);
-    double z_ecef = (N * (1-e_squared) + front_altitude) * sin(front_latitude);
+    double z_ecef = (N * (1-e_squared) + front_altitude) * sin(front_latitude)*0;
 
     //convert latitude-longitude to ENU coordinates
     x = -sin(origin_longitude) * (x_ecef - x_origin) + cos(origin_longitude) * (y_ecef - y_origin);
     y = -sin(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) - sin(origin_longitude) * sin(origin_latitude) * (y_ecef - y_origin) + cos(origin_latitude) * (z_ecef - z_origin);
     z = cos(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) + cos(origin_latitude) * sin(origin_longitude) * (y_ecef - y_origin) + sin(origin_latitude) * (z_ecef - z_origin);
+    x = x/100;
+    y = y/100;
+    z = 0;
 
     // Compute angular velocity (bicycle model)
     //double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
@@ -93,8 +97,6 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     //y += speed_mps * sin(theta) * dt;
     //theta += angular_velocity * dt;
 
-    // Publish odometry data
-    static ros::Publisher odom_pub;
     //static tf::TransformBroadcaster tf_broadcaster;
 
     nav_msgs::Odometry odom_msg;
@@ -119,26 +121,34 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     prev_y = y;
     // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
     
-  
+    // //Update the transform's origin with the new pose
+    // transform_.setOrigin(tf::Vector3(x, y, z));
+    // //Transform to Vehicle frame via tf
+    // transform_.setRotation(tf_quat);
+    // // Publish the updated transform
+    // tf_broadcaster_.sendTransform(tf::StampedTransform(transform_, current_time, "odom", "vehicle"));
+        // Broadcast TF transform (odom → vehicle)
+    transform.setOrigin(tf::Vector3(x, y, z));
     tf_quat.setRPY(0, 0, theta); 
-    geometry_msgs::Quaternion odom_quat;
-    tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
-    odom_msg.pose.pose.orientation = odom_quat;
+    transform.setRotation(tf_quat); // Reuse the same quaternion
+    //geometry_msgs::Quaternion odom_quat;
+    //tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
+    odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(theta); // Set orientation using yaw angle
 
+
+    
     // Set velocity //(should we set it?)
     //odom_msg.twist.twist.linear.x = speed_mps;
     //odom_msg.twist.twist.angular.z = angular_velocity;
 
-    if (!odom_pub) {
-        ros::NodeHandle nh;
-        odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
-    }
-    odom_pub.publish(odom_msg);
-
-    // Broadcast TF transform (odom → vehicle)
-    transform.setOrigin(tf::Vector3(x, y, z));
-    transform.setRotation(tf_quat); // Reuse the same quaternion
-    tf_broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
+    // if (!odom_pub) {
+    //     ros::NodeHandle nh;
+    //     odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
+    // }
+    odom_pub_.publish(odom_msg);
+    // Publish the transform
+    tf_broadcaster_.sendTransform(tf::StampedTransform(transform, current_time, "odom", "vehicle"));
+    //tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
   }
 };
 

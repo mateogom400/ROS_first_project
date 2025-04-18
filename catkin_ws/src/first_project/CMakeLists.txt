@@ -6,14 +6,14 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   nav_msgs
   geometry_msgs
-  tf2_ros
+  tf
 )
 
 # Declare the catkin package
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES first_project
-  CATKIN_DEPENDS roscpp nav_msgs geometry_msgs tf2_ros
+  CATKIN_DEPENDS roscpp nav_msgs geometry_msgs tf
 )
 
 # Include directories
@@ -22,27 +22,25 @@ include_directories(
 )
 
 # Add executable for each node
-add_executable(odometer src/odom_pub.cpp src/odom_sub.cpp)
-add_executable(gps_odometer src/gps_pub.cpp src/gps_sub.cpp)
-add_executable(sector_time src/sector_time_pub.cpp src/sector_time_sub.cpp)
+#add_executable(odometer src/odom_pub.cpp src/odom_sub.cpp)
+add_executable(gps_odometer src/gps_odometer.cpp )
+#add_executable(sector_time src/sector_time_pub.cpp src/sector_time_sub.cpp)
 
-# Link the executables with the required libraries
-target_link_libraries(odometer
-  ${catkin_LIBRARIES}
-)
+# # Link the executables with the required libraries
+# target_link_libraries(odometer
+#   ${catkin_LIBRARIES}
+# )
 
 target_link_libraries(gps_odometer
   ${catkin_LIBRARIES}
 )
 
-target_link_libraries(sector_time
-  ${catkin_LIBRARIES}
-)
+# target_link_libraries(sector_time
+#   ${catkin_LIBRARIES}
+# )
 
 # Install the executables
 install(TARGETS
-  odometer
   gps_odometer
-  sector_time
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
