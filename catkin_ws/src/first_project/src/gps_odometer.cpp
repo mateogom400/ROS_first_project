@@ -36,6 +36,8 @@ private:
     // Latest received messages from the subscribed topics
     sensor_msgs::NavSatFix front_gps_msg_;
     //sensor_msgs::NavSatFix rear_gps_msg_;
+    tf::Quaternion tf_quat;
+    tf::Transform transform;
 public:
     FrontRearNode() {
         // Initialize subscribers and publishers
@@ -51,7 +53,7 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     double front_latitude = msg->latitude * M_PI/180; // Convert latitude to radians
     double front_longitude = msg->longitude * M_PI/180; // Convert longitude to radians
     double front_altitude = msg->altitude; // Altitude is a linear measurement, no conversion needed
-    current_time = msg->header.stamp;
+    ros::Time current_time = msg->header.stamp;
     if (prev_time.isZero()) {
         // Initialize the origin
         origin_latitude = front_latitude;
@@ -65,7 +67,7 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     }
 
     // Convert latitude-longitude to ECEF coordinates
-    double N = a/(sqrt(1-e_squared*(pow(sin(front_latitude)),2)));
+    double N = a/(sqrt(1-e_squared*pow((sin(front_latitude)),2)));
     double x_ecef = (N + front_altitude) * cos(front_latitude) * cos(front_longitude);
     double y_ecef = (N + front_altitude) * sin(front_longitude) * cos(front_latitude);
     double z_ecef = (N * (1-e_squared) + front_altitude) * sin(front_latitude);
@@ -76,10 +78,9 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     z = cos(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) + cos(origin_latitude) * sin(origin_longitude) * (y_ecef - y_origin) + sin(origin_latitude) * (z_ecef - z_origin);
 
     // Compute angular velocity (bicycle model)
-    double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
+    //double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
 
     // Calculate time difference
-    ros::Time current_time = msg->header.stamp;
     if (prev_time.isZero()) {
         prev_time = current_time;
         return;
@@ -94,7 +95,7 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
 
     // Publish odometry data
     static ros::Publisher odom_pub;
-    static tf::TransformBroadcaster tf_broadcaster;
+    //static tf::TransformBroadcaster tf_broadcaster;
 
     nav_msgs::Odometry odom_msg;
     odom_msg.header.stamp = current_time;
@@ -118,8 +119,8 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     prev_y = y;
     // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
     
-    tf::Quaternion tf_quat;
-    tf_quat.setRPY(0, 0, theta); // HOW DO WE COMPUTE THETA??
+  
+    tf_quat.setRPY(0, 0, theta); 
     geometry_msgs::Quaternion odom_quat;
     tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
     odom_msg.pose.pose.orientation = odom_quat;
@@ -135,7 +136,6 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     odom_pub.publish(odom_msg);
 
     // Broadcast TF transform (odom → vehicle)
-    tf::Transform transform;
     transform.setOrigin(tf::Vector3(x, y, z));
     transform.setRotation(tf_quat); // Reuse the same quaternion
     tf_broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
