@@ -20,6 +20,9 @@ ros::Time prev_time; // Previous timestamp
 // Origin coordinates and ECEF reference point
 double origin_latitude = 0.0, origin_longitude = 0.0, origin_altitude = 0.0;
 double x_origin = 0.0, y_origin = 0.0, z_origin = 0.0;
+int i = 0;
+double prev_prev_x = 0.0, prev_prev_y = 0.0;
+double prev_theta = 0.0;
 
 class FrontRearNode {
 private:
@@ -42,8 +45,8 @@ private:
 public:
     FrontRearNode() {
         // Initialize subscribers and publishers
-        front_gps_sub_ = nh.subscribe("/swiftnav/front/gps_pose", 1, &FrontRearNode::frontGpsCallback, this);
-        odom_pub_ = nh.advertise<nav_msgs::Odometry>("/odom", 10);
+        front_gps_sub_ = nh.subscribe("/swiftnav/front/gps_pose", 1, &FrontRearNode::frontGpsCallback, this); 
+        odom_pub_ = nh.advertise<nav_msgs::Odometry>("/odom", 10); 
         //rear_gps_sub_ = nh.subscribe("/swiftnav/rear/gps_pose", 1, &FrontRearNode::rearGpsCallback, this);
     }
 
@@ -73,12 +76,19 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     double y_ecef = (N + front_altitude) * sin(front_longitude) * cos(front_latitude);
     double z_ecef = (N * (1-e_squared) + front_altitude) * sin(front_latitude)*0;
 
+    if (i>=2){
+        prev_prev_x = prev_x;
+        prev_prev_y = prev_y;
+    }
+    prev_x = x;
+    prev_y = y;
+
     //convert latitude-longitude to ENU coordinates
     x = -sin(origin_longitude) * (x_ecef - x_origin) + cos(origin_longitude) * (y_ecef - y_origin);
     y = -sin(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) - sin(origin_longitude) * sin(origin_latitude) * (y_ecef - y_origin) + cos(origin_latitude) * (z_ecef - z_origin);
     z = cos(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) + cos(origin_latitude) * sin(origin_longitude) * (y_ecef - y_origin) + sin(origin_latitude) * (z_ecef - z_origin);
-    x = x/100;
-    y = y/100;
+    // x = x/100;
+    // y = y/100;
     z = 0;
 
     // Compute angular velocity (bicycle model)
@@ -116,9 +126,21 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
         delta_x = x - prev_x;
         delta_y = y - prev_y;
     }
+    //prev_theta = theta;
     theta = atan2(delta_y, delta_x); // Compute theta from delta_x and delta_y
-    prev_x = x;
-    prev_y = y;
+
+    if (x < -500000 || y < -500000){
+        double dp = sqrt(pow(prev_x-prev_prev_x,2) + pow(prev_y - prev_prev_y,2));
+        x = prev_x + dp*cos(prev_theta);
+        y = prev_y + dp*sin(prev_theta);
+        odom_msg.pose.pose.position.x = x;
+        odom_msg.pose.pose.position.y = y;
+
+        delta_x = dp*cos(prev_theta);
+        delta_y = dp*sin(prev_theta);
+        theta = atan2(delta_y, delta_x);
+  
+    }
     // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
     
     // //Update the transform's origin with the new pose
@@ -149,12 +171,13 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     // Publish the transform
     tf_broadcaster_.sendTransform(tf::StampedTransform(transform, current_time, "odom", "vehicle"));
     //tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
+    i++;
   }
 };
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "gps_odom");
     FrontRearNode front_rear;
-    ros::spin();
+    ros::spin(); 
     return 0;
 }
