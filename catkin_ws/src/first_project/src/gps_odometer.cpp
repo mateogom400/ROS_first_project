@@ -130,16 +130,20 @@ void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
     theta = atan2(delta_y, delta_x); // Compute theta from delta_x and delta_y
 
     if (x < -500000 || y < -500000){
-        double dp = sqrt(pow(prev_x-prev_prev_x,2) + pow(prev_y - prev_prev_y,2));
-        x = prev_x + dp*cos(prev_theta);
-        y = prev_y + dp*sin(prev_theta);
+        //double dp = sqrt(pow(prev_x-prev_prev_x,2) + pow(prev_y - prev_prev_y,2));
+        double dx = prev_x - prev_prev_x
+        double dy = prev_y - prev_prev_y;
+        //x = prev_x + dp*cos(prev_theta);
+        //y = prev_y + dp*sin(prev_theta);
+        x = prev_x + dx;
+        y = prev_y + dy;
         odom_msg.pose.pose.position.x = x;
         odom_msg.pose.pose.position.y = y;
 
-        delta_x = dp*cos(prev_theta);
-        delta_y = dp*sin(prev_theta);
-        theta = atan2(delta_y, delta_x);
-  
+        //delta_x = dp*cos(prev_theta);
+        //delta_y = dp*sin(prev_theta);
+        //theta = atan2(delta_y, delta_x);
+        theta = prev_theta;
     }
     // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
     
