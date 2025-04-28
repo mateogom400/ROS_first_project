@@ -7,24 +7,23 @@
 // Vehicle parameters
 const double WHEELBASE = 1.765; // Front-to-rear wheel distance (meters)
 const double STEERING_FACTOR = 32.0; // Steering factor
+const double ANGULAR_VELOCITY_EPSILON = 1e-6; // Threshold for w ≈ 0
 
 // Global variables for odometry computation
-double x = 0.0, y = 0.0, theta = 0.0; // Pose (x, y, theta)
-ros::Time prev_time; // Previous timestamp
+double x = 0.0, y = 0.0, theta = 0.0;
+ros::Time prev_time;
 
 void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
-    // Extract speed (km/h) and steering wheel angle (degrees)
+    // Extract data
     double speed_kmh = msg->point.y;
     double steering_wheel_angle_deg = msg->point.x;
 
-    // Convert speed to m/s and steering angle to wheel angle
+    // Convert units
     double speed_mps = speed_kmh / 3.6;
     double wheel_angle_rad = (steering_wheel_angle_deg / STEERING_FACTOR) * M_PI / 180.0;
-
-    // Compute angular velocity (bicycle model)
     double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
 
-    // Calculate time difference
+    // Time handling
     ros::Time current_time = msg->header.stamp;
     if (prev_time.isZero()) {
         prev_time = current_time;
@@ -33,12 +32,24 @@ void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
     double dt = (current_time - prev_time).toSec();
     prev_time = current_time;
 
-    // Update pose using Euler integration
-    x += speed_mps * cos(theta) * dt;
-    y += speed_mps * sin(theta) * dt;
-    theta += angular_velocity * dt;
+    // ********************** INTEGRATION METHOD CHANGE **********************
+    double delta_theta = angular_velocity * dt;
+    
+    if (fabs(angular_velocity) > ANGULAR_VELOCITY_EPSILON) {
+        // Exact integration (circular motion)
+        double radius = speed_mps / angular_velocity;
+        x += radius * (sin(theta + delta_theta) - sin(theta));
+        y += radius * (cos(theta) - cos(theta + delta_theta));
+    } else {
+        // Runge-Kutta approximation (θ_k+1/2 = θ_k + ω_k * T_s / 2)
+        double theta_mid = theta + angular_velocity * dt / 2.0;
+        x += speed_mps * cos(theta_mid) * dt;
+        y += speed_mps * sin(theta_mid) * dt;
+    }
+    theta += delta_theta; // Orientation update (same for both methods)
+    // ***********************************************************************
 
-    // Publish odometry data
+    // Publish odometry data (unchanged)
     static ros::Publisher odom_pub;
     static tf::TransformBroadcaster tf_broadcaster;
 
@@ -47,39 +58,39 @@ void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
     odom_msg.header.frame_id = "odom";
     odom_msg.child_frame_id = "vehicle";
 
-    // Set position
+    // Position
     odom_msg.pose.pose.position.x = x;
     odom_msg.pose.pose.position.y = y;
-    odom_msg.pose.pose.position.z = 0.0; // 2D assumption
+    odom_msg.pose.pose.position.z = 0.0;
 
-    // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
+    // Orientation using setRPY
     tf::Quaternion tf_quat;
     tf_quat.setRPY(0, 0, theta);
     geometry_msgs::Quaternion odom_quat;
-    tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
+    tf::quaternionTFToMsg(tf_quat, odom_quat);
     odom_msg.pose.pose.orientation = odom_quat;
 
-    // Set velocity
+    // Velocity
     odom_msg.twist.twist.linear.x = speed_mps;
     odom_msg.twist.twist.angular.z = angular_velocity;
 
     if (!odom_pub) {
         ros::NodeHandle nh;
-        odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
+        odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 1);
     }
     odom_pub.publish(odom_msg);
 
-    // Broadcast TF transform (odom → vehicle)
+    // TF Broadcast
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(x, y, 0.0));
-    transform.setRotation(tf_quat); // Reuse the same quaternion
+    transform.setRotation(tf_quat);
     tf_broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
 }
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "odometer");
     ros::NodeHandle nh;
-    ros::Subscriber sub = nh.subscribe("/speedsteer", 10, speedSteerCallback);
+    ros::Subscriber sub = nh.subscribe("/speedsteer", 1, speedSteerCallback);
     ros::spin();
     return 0;
 }
