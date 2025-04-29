@@ -59,8 +59,8 @@ void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
     odom_msg.child_frame_id = "vehicle";
 
     // Position
-    odom_msg.pose.pose.position.x = x;
-    odom_msg.pose.pose.position.y = y;
+    odom_msg.pose.pose.position.x = -y;
+    odom_msg.pose.pose.position.y = x;
     odom_msg.pose.pose.position.z = 0.0;
 
     // Orientation using setRPY
@@ -82,7 +82,7 @@ void speedSteerCallback(const geometry_msgs::PointStamped::ConstPtr& msg) {
 
     // TF Broadcast
     tf::Transform transform;
-    transform.setOrigin(tf::Vector3(x, y, 0.0));
+    transform.setOrigin(tf::Vector3(-y, x, 0.0));
     transform.setRotation(tf_quat);
     tf_broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
 }
