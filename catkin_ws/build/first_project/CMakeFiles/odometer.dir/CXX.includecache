@@ -6,7 +6,7 @@
 
 #IncludeRegexTransform: 
 
-/home/robotics/catkin_ws/src/first_project/src/gps_odometer.cpp
+/home/robotics/catkin_ws/src/first_project/src/odometer.cpp
 ros/ros.h
 /home/robotics/catkin_ws/src/first_project/src/ros/ros.h
 geometry_msgs/PointStamped.h
@@ -16,8 +16,6 @@ nav_msgs/Odometry.h
 tf/transform_broadcaster.h
 -
 cmath
--
-sensor_msgs/NavSatFix.h
 -
 
 /opt/ros/noetic/include/geometry_msgs/Point.h
@@ -953,42 +951,6 @@ ros/forwards.h
 /opt/ros/noetic/include/ros/ros/forwards.h
 
 /opt/ros/noetic/include/rosconsole/macros_generated.h
-
-/opt/ros/noetic/include/sensor_msgs/NavSatFix.h
-string
--
-vector
--
-memory
--
-ros/types.h
--
-ros/serialization.h
--
-ros/builtin_message_traits.h
--
-ros/message_operations.h
--
-std_msgs/Header.h
--
-sensor_msgs/NavSatStatus.h
--
-
-/opt/ros/noetic/include/sensor_msgs/NavSatStatus.h
-string
--
-vector
--
-memory
--
-ros/types.h
--
-ros/serialization.h
--
-ros/builtin_message_traits.h
--
-ros/message_operations.h
--
 
 /opt/ros/noetic/include/std_msgs/Header.h
 string

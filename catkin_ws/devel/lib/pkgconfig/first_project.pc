@@ -3,6 +3,6 @@ prefix=/home/robotics/catkin_ws/devel
 Name: first_project
 Description: Description of first_project
 Version: 0.0.0
-Cflags: -I/home/robotics/catkin_ws/src/first_project/include
-Libs: -L${prefix}/lib -lfirst_project
-Requires: roscpp nav_msgs geometry_msgs tf
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

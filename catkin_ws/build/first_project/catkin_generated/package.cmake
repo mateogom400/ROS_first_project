@@ -1,6 +1,6 @@
 set(_CATKIN_CURRENT_PACKAGE "first_project")
 set(first_project_VERSION "0.0.0")
-set(first_project_MAINTAINER "Lorenzo Ortolani <ortolore@gmail.com>")
+set(first_project_MAINTAINER "Mateo Gomez <mateogomezab18@hotmail.com>")
 set(first_project_PACKAGE_FORMAT "2")
 set(first_project_BUILD_DEPENDS "roscpp" "nav_msgs" "geometry_msgs" "tf" "sensor_msgs" "eigen" "message_filters" "message_generation" "message_runtime" "std_msgs")
 set(first_project_BUILD_EXPORT_DEPENDS "roscpp" "nav_msgs" "geometry_msgs" "tf" "sensor_msgs" "eigen" "message_filters" "message_generation" "message_runtime" "std_msgs")

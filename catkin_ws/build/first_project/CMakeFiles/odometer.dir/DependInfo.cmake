@@ -4,7 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
-  "/home/robotics/catkin_ws/src/first_project/src/gps_odometer.cpp" "/home/robotics/catkin_ws/build/first_project/CMakeFiles/gps_odometer.dir/src/gps_odometer.cpp.o"
+  "/home/robotics/catkin_ws/src/first_project/src/odometer.cpp" "/home/robotics/catkin_ws/build/first_project/CMakeFiles/odometer.dir/src/odometer.cpp.o"
   )
 set(CMAKE_CXX_COMPILER_ID "GNU")
 
@@ -17,6 +17,8 @@ set(CMAKE_TARGET_DEFINITIONS_CXX
 
 # The include file search paths:
 set(CMAKE_CXX_TARGET_INCLUDE_PATH
+  "/usr/include/eigen3"
+  "/home/robotics/catkin_ws/src/first_project/include"
   "/opt/ros/noetic/include"
   "/opt/ros/noetic/share/xmlrpcpp/cmake/../../../include/xmlrpcpp"
   )
