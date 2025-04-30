@@ -57,22 +57,74 @@ public:
     
     bool getRefPosition() {
         bool success = true;
+        ros::NodeHandle private_nh("~"); // Private node handle to access parameters in this node's namespace
         
-        // Get reference position from parameters
-        if (!nh_.getParam("/lat_r", lat_ref_)) {
-            ROS_WARN("Parameter 'lat_r' not found, using default value 0.0");
+        // Print all parameters on the parameter server for debugging
+        ROS_INFO("Listing all parameters on the server:");
+        std::vector<std::string> params;
+        if (ros::param::getParamNames(params)) {
+            for (const auto& param : params) {
+                ROS_INFO("  Parameter: %s", param.c_str());
+            }
+        }
+        
+        // Try different ways to get the parameters
+        // First try with private nodehandle (~/param)
+        if (private_nh.getParam("lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in private namespace: %f", lat_ref_);
+        } 
+        // Try with node namespace (node_name/param)
+        else if (nh_.getParam("lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in node namespace: %f", lat_ref_);
+        }
+        // Try with global namespace (/param)
+        else if (ros::param::get("/lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in global namespace: %f", lat_ref_);
+        }
+        // Try with specific namespace (/node_name/param) 
+        else if (ros::param::get("/gps_odometer/lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in /gps_odometer/ namespace: %f", lat_ref_);
+        }
+        else {
+            ROS_WARN("Parameter 'lat_r' not found anywhere, using default value 0.0");
             lat_ref_ = 0.0;
             success = false;
         }
         
-        if (!nh_.getParam("/lon_r", lon_ref_)) {
-            ROS_WARN("Parameter 'lon_r' not found, using default value 0.0");
+        // Same for longitude
+        if (private_nh.getParam("lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in private namespace: %f", lon_ref_);
+        } 
+        else if (nh_.getParam("lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in node namespace: %f", lon_ref_);
+        }
+        else if (ros::param::get("/lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in global namespace: %f", lon_ref_);
+        }
+        else if (ros::param::get("/gps_odometer/lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in /gps_odometer/ namespace: %f", lon_ref_);
+        }
+        else {
+            ROS_WARN("Parameter 'lon_r' not found anywhere, using default value 0.0");
             lon_ref_ = 0.0;
             success = false;
         }
         
-        if (!nh_.getParam("/alt_r", alt_ref_)) {
-            ROS_WARN("Parameter 'alt_r' not found, using default value 0.0");
+        // Same for altitude
+        if (private_nh.getParam("alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in private namespace: %f", alt_ref_);
+        } 
+        else if (nh_.getParam("alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in node namespace: %f", alt_ref_);
+        }
+        else if (ros::param::get("/alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in global namespace: %f", alt_ref_);
+        }
+        else if (ros::param::get("/gps_odometer/alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in /gps_odometer/ namespace: %f", alt_ref_);
+        }
+        else {
+            ROS_WARN("Parameter 'alt_r' not found anywhere, using default value 0.0");
             alt_ref_ = 0.0;
             success = false;
         }
