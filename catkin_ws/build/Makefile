@@ -1025,6 +1025,19 @@ odometer/fast:
 	$(MAKE) -f first_project/CMakeFiles/odometer.dir/build.make first_project/CMakeFiles/odometer.dir/build
 .PHONY : odometer/fast
 
+#=============================================================================
+# Target rules for targets named gps_odometer
+
+# Build rule for target.
+gps_odometer: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 gps_odometer
+.PHONY : gps_odometer
+
+# fast build rule for target.
+gps_odometer/fast:
+	$(MAKE) -f first_project/CMakeFiles/gps_odometer.dir/build.make first_project/CMakeFiles/gps_odometer.dir/build
+.PHONY : gps_odometer/fast
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -1104,6 +1117,7 @@ help:
 	@echo "... tf2_msgs_generate_messages_cpp"
 	@echo "... dynamic_reconfigure_generate_messages_lisp"
 	@echo "... odometer"
+	@echo "... gps_odometer"
 .PHONY : help
 
 

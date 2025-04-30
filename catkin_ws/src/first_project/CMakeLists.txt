@@ -31,6 +31,7 @@ include_directories(include ${catkin_INCLUDE_DIRS}
 # Add executable for each node
 #add_executable(odometer src/odom_pub.cpp src/odom_sub.cpp)
 add_executable(odometer src/odometer.cpp )
+add_executable(gps_odometer src/gps_odometer.cpp )
 #add_executable(sector_time src/sector_time_pub.cpp src/sector_time_sub.cpp)
 
 #Link the executables with the required libraries
@@ -38,9 +39,9 @@ target_link_libraries(odometer
  ${catkin_LIBRARIES}
 )
 
-#target_link_libraries(gps_odometer
-#  ${catkin_LIBRARIES}
-#)
+target_link_libraries(gps_odometer
+  ${catkin_LIBRARIES}
+)
 
 # target_link_libraries(sector_time
 #   ${catkin_LIBRARIES}
@@ -48,6 +49,6 @@ target_link_libraries(odometer
 
 # Install the executables
 #install(TARGETS
-#  gps_odometer
-#  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# gps_odometer
+# DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 #)

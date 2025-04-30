@@ -1,187 +1,269 @@
-//copy from mateo's first node
 #include "ros/ros.h"
-#include "geometry_msgs/PointStamped.h"
+#include "sensor_msgs/NavSatFix.h"
 #include "nav_msgs/Odometry.h"
 #include <tf/transform_broadcaster.h>
 #include <cmath>
-#include <sensor_msgs/NavSatFix.h>
+#include <Eigen/Dense>
 
-// Vehicle parameters
-const double WHEELBASE = 1.765; // Front-to-rear wheel distance (meters)
-const double STEERING_FACTOR = 32.0; // Steering factor
-
-// Global variables for odometry computation
-double x = 0.0, y = 0.0, z =0.0, theta = 0.0; // Pose (x, y, theta)
-double delta_x = 0.0, delta_y = 0.0;
-double prev_x = 0.0, prev_y = 0.0;
-double a = 6378137, b =6356752, e_squared = 1-pow(b,2)/pow(a,2); //semi major and semi minor axis of the earth and eccentricity
-ros::Time prev_time; // Previous timestamp
-
-// Origin coordinates and ECEF reference point
-double origin_latitude = 0.0, origin_longitude = 0.0, origin_altitude = 0.0;
-double x_origin = 0.0, y_origin = 0.0, z_origin = 0.0;
-int i = 0;
-double prev_prev_x = 0.0, prev_prev_y = 0.0;
-double prev_theta = 0.0;
-
-class FrontRearNode {
+class GpsOdometer {
 private:
-    // Subscribers for the front and rear GPS topics
-    ros::Subscriber front_gps_sub_;
-    //ros::Subscriber rear_gps_sub_;
-
-    // Publisher for the odometry topic
+    // ROS node handle
+    ros::NodeHandle nh_;
+    
+    // Subscriber and publisher
+    ros::Subscriber gps_sub_;
     ros::Publisher odom_pub_;
-
+    
     // Transform broadcaster
     tf::TransformBroadcaster tf_broadcaster_;
-
-    // Latest received messages from the subscribed topics
-    sensor_msgs::NavSatFix front_gps_msg_;
-    //sensor_msgs::NavSatFix rear_gps_msg_;
-    tf::Quaternion tf_quat;
-    tf::Transform transform;
-    ros::NodeHandle nh;
+    
+    // Constants
+    const double a = 6378137.0;  // WGS-84 semi-major axis (m)
+    const double b = 6356752.0;  // WGS-84 semi-minor axis (m)
+    const double e2 = 1.0 - (b*b)/(a*a);  // Square of eccentricity
+    
+    // Reference coordinates
+    double lat_ref_, lon_ref_, alt_ref_;
+    Eigen::Vector3d ecef_ref_position_;
+    
+    // Previous state variables
+    bool first_message_ = true;
+    ros::Time prev_time_;
+    Eigen::Vector3d prev_enu_position_ = Eigen::Vector3d::Zero();
+    Eigen::Vector3d denu_position_ = Eigen::Vector3d::Zero();
+    double prev_heading_angle_ = 0.0;
+    
+    // Smoothing variables
+    double alpha_ = 0.8;  // Smoothing factor (0 < alpha < 1)
+    double speed_ = 0.0;
+    
+    // Tunnel detection constants
+    const double TUNNEL_X = -1028663.637769047;
+    const double TUNNEL_Y = -4477422.006266854;
+    
 public:
-    FrontRearNode() {
-        // Initialize subscribers and publishers
-        front_gps_sub_ = nh.subscribe("/swiftnav/front/gps_pose", 1, &FrontRearNode::frontGpsCallback, this); 
-        odom_pub_ = nh.advertise<nav_msgs::Odometry>("/odom", 10); 
-        //rear_gps_sub_ = nh.subscribe("/swiftnav/rear/gps_pose", 1, &FrontRearNode::rearGpsCallback, this);
+    GpsOdometer() {
+        // Get reference position parameters
+        if (!getRefPosition()) {
+            ROS_WARN("Using default reference position");
+        }
+        
+        // Set up subscriber and publisher
+        gps_sub_ = nh_.subscribe("/swiftnav/front/gps_pose", 10, &GpsOdometer::gpsCallback, this);
+        odom_pub_ = nh_.advertise<nav_msgs::Odometry>("/gps_odom", 10);
+        
+        ROS_INFO("GPS Odometer node initialized");
     }
-
-
-
-void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) { 
-    //extract data from the message
-    double front_latitude = msg->latitude * M_PI/180; // Convert latitude to radians
-    double front_longitude = msg->longitude * M_PI/180; // Convert longitude to radians
-    double front_altitude = msg->altitude; // Altitude is a linear measurement, no conversion needed
-    ros::Time current_time = msg->header.stamp;
-    if (prev_time.isZero()) {
-        // Initialize the origin
-        origin_latitude = front_latitude;
-        origin_longitude = front_longitude;
-        origin_altitude = front_altitude;
-        double N = a / (sqrt(1 - e_squared * pow(sin(origin_latitude), 2)));
-        x_origin = (N + origin_altitude) * cos(origin_latitude) * cos(origin_longitude);
-        y_origin = (N + origin_altitude) * sin(origin_longitude) * cos(origin_latitude);
-        z_origin = (N * (1-e_squared) + origin_altitude) * sin(origin_latitude)*0;
-        // return;
-    }
-
-    // Convert latitude-longitude to ECEF coordinates
-    double N = a/(sqrt(1-e_squared*pow((sin(front_latitude)),2)));
-    double x_ecef = (N + front_altitude) * cos(front_latitude) * cos(front_longitude);
-    double y_ecef = (N + front_altitude) * sin(front_longitude) * cos(front_latitude);
-    double z_ecef = (N * (1-e_squared) + front_altitude) * sin(front_latitude)*0;
-
-    if (i>=2){
-        prev_prev_x = prev_x;
-        prev_prev_y = prev_y;
-    }
-    prev_x = x;
-    prev_y = y;
-
-    //convert latitude-longitude to ENU coordinates
-    x = -sin(origin_longitude) * (x_ecef - x_origin) + cos(origin_longitude) * (y_ecef - y_origin);
-    y = -sin(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) - sin(origin_longitude) * sin(origin_latitude) * (y_ecef - y_origin) + cos(origin_latitude) * (z_ecef - z_origin);
-    z = cos(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) + cos(origin_latitude) * sin(origin_longitude) * (y_ecef - y_origin) + sin(origin_latitude) * (z_ecef - z_origin);
-    // x = x/100;
-    // y = y/100;
-    z = 0;
-
-    // Compute angular velocity (bicycle model)
-    //double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
-
-    // Calculate time difference
-    if (prev_time.isZero()) {
-        prev_time = current_time;
-        return;
-    }
-    double dt = (current_time - prev_time).toSec();
-    prev_time = current_time;
-
-    // Update pose using Euler integration //(we don't need that?)
-    //x += speed_mps * cos(theta) * dt;
-    //y += speed_mps * sin(theta) * dt;
-    //theta += angular_velocity * dt;
-
-    //static tf::TransformBroadcaster tf_broadcaster;
-
-    nav_msgs::Odometry odom_msg;
-    odom_msg.header.stamp = current_time;
-    odom_msg.header.frame_id = "odom";
-    odom_msg.child_frame_id = "vehicle";
-
-    // Set position
-    odom_msg.pose.pose.position.x = x;
-    odom_msg.pose.pose.position.y = y;
-    odom_msg.pose.pose.position.z = z; // 2D assumption but we have altitude infos so okayyyy
-    if (prev_time.isZero()) {
-        delta_x = 0;
-        delta_y = 0;
-        return;
-    }else{
-        delta_x = x - prev_x;
-        delta_y = y - prev_y;
-    }
-    //prev_theta = theta;
-    theta = atan2(delta_y, delta_x); // Compute theta from delta_x and delta_y
-
-    if (x < -500000 || y < -500000){
-        //double dp = sqrt(pow(prev_x-prev_prev_x,2) + pow(prev_y - prev_prev_y,2));
-        double dx = prev_x - prev_prev_x
-        double dy = prev_y - prev_prev_y;
-        //x = prev_x + dp*cos(prev_theta);
-        //y = prev_y + dp*sin(prev_theta);
-        x = prev_x + dx;
-        y = prev_y + dy;
-        odom_msg.pose.pose.position.x = x;
-        odom_msg.pose.pose.position.y = y;
-
-        //delta_x = dp*cos(prev_theta);
-        //delta_y = dp*sin(prev_theta);
-        //theta = atan2(delta_y, delta_x);
-        theta = prev_theta;
-    }
-    // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
     
-    // //Update the transform's origin with the new pose
-    // transform_.setOrigin(tf::Vector3(x, y, z));
-    // //Transform to Vehicle frame via tf
-    // transform_.setRotation(tf_quat);
-    // // Publish the updated transform
-    // tf_broadcaster_.sendTransform(tf::StampedTransform(transform_, current_time, "odom", "vehicle"));
-        // Broadcast TF transform (odom → vehicle)
-    transform.setOrigin(tf::Vector3(x, y, z));
-    tf_quat.setRPY(0, 0, theta); 
-    transform.setRotation(tf_quat); // Reuse the same quaternion
-    //geometry_msgs::Quaternion odom_quat;
-    //tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
-    odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(theta); // Set orientation using yaw angle
-
-
+    bool getRefPosition() {
+        bool success = true;
+        ros::NodeHandle private_nh("~"); // Private node handle to access parameters in this node's namespace
+        
+        // Print all parameters on the parameter server for debugging
+        ROS_INFO("Listing all parameters on the server:");
+        std::vector<std::string> params;
+        if (ros::param::getParamNames(params)) {
+            for (const auto& param : params) {
+                ROS_INFO("  Parameter: %s", param.c_str());
+            }
+        }
+        
+        // Try different ways to get the parameters
+        // First try with private nodehandle (~/param)
+        if (private_nh.getParam("lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in private namespace: %f", lat_ref_);
+        } 
+        // Try with node namespace (node_name/param)
+        else if (nh_.getParam("lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in node namespace: %f", lat_ref_);
+        }
+        // Try with global namespace (/param)
+        else if (ros::param::get("/lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in global namespace: %f", lat_ref_);
+        }
+        // Try with specific namespace (/node_name/param) 
+        else if (ros::param::get("/gps_odometer/lat_r", lat_ref_)) {
+            ROS_INFO("Found lat_r in /gps_odometer/ namespace: %f", lat_ref_);
+        }
+        else {
+            ROS_WARN("Parameter 'lat_r' not found anywhere, using default value 0.0");
+            lat_ref_ = 0.0;
+            success = false;
+        }
+        
+        // Same for longitude
+        if (private_nh.getParam("lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in private namespace: %f", lon_ref_);
+        } 
+        else if (nh_.getParam("lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in node namespace: %f", lon_ref_);
+        }
+        else if (ros::param::get("/lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in global namespace: %f", lon_ref_);
+        }
+        else if (ros::param::get("/gps_odometer/lon_r", lon_ref_)) {
+            ROS_INFO("Found lon_r in /gps_odometer/ namespace: %f", lon_ref_);
+        }
+        else {
+            ROS_WARN("Parameter 'lon_r' not found anywhere, using default value 0.0");
+            lon_ref_ = 0.0;
+            success = false;
+        }
+        
+        // Same for altitude
+        if (private_nh.getParam("alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in private namespace: %f", alt_ref_);
+        } 
+        else if (nh_.getParam("alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in node namespace: %f", alt_ref_);
+        }
+        else if (ros::param::get("/alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in global namespace: %f", alt_ref_);
+        }
+        else if (ros::param::get("/gps_odometer/alt_r", alt_ref_)) {
+            ROS_INFO("Found alt_r in /gps_odometer/ namespace: %f", alt_ref_);
+        }
+        else {
+            ROS_WARN("Parameter 'alt_r' not found anywhere, using default value 0.0");
+            alt_ref_ = 0.0;
+            success = false;
+        }
+        
+        // Convert latitude and longitude to radians
+        lat_ref_ = lat_ref_ * M_PI / 180.0;
+        lon_ref_ = lon_ref_ * M_PI / 180.0;
+        // Note: altitude is already in meters, no conversion needed
+        
+        // Calculate reference ECEF coordinates
+        double N_ref = a / sqrt(1.0 - e2 * pow(sin(lat_ref_), 2));
+        ecef_ref_position_(0) = (N_ref + alt_ref_) * cos(lat_ref_) * cos(lon_ref_);
+        ecef_ref_position_(1) = (N_ref + alt_ref_) * cos(lat_ref_) * sin(lon_ref_);
+        ecef_ref_position_(2) = (N_ref * (1.0 - e2) + alt_ref_) * sin(lat_ref_);
+        
+        ROS_INFO("Reference position set - Lat: %.6f, Lon: %.6f, Alt: %.2f", 
+                 lat_ref_ * 180.0 / M_PI, lon_ref_ * 180.0 / M_PI, alt_ref_);
+        
+        return success;
+    }
     
-    // Set velocity //(should we set it?)
-    //odom_msg.twist.twist.linear.x = speed_mps;
-    //odom_msg.twist.twist.angular.z = angular_velocity;
-
-    // if (!odom_pub) {
-    //     ros::NodeHandle nh;
-    //     odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
-    // }
-    odom_pub_.publish(odom_msg);
-    // Publish the transform
-    tf_broadcaster_.sendTransform(tf::StampedTransform(transform, current_time, "odom", "vehicle"));
-    //tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
-    i++;
-  }
+    double clamp(double val, double min_val, double max_val) {
+        return std::max(min_val, std::min(val, max_val));
+    }
+    
+    void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
+        // Get time from message
+        ros::Time curr_time = msg->header.stamp;
+        
+        // Convert GPS data (LLA) to ECEF
+        double lat = msg->latitude * M_PI / 180.0;
+        double lon = msg->longitude * M_PI / 180.0;
+        double alt = msg->altitude;  // Already in meters
+        
+        double N = a / sqrt(1.0 - e2 * pow(sin(lat), 2));
+        
+        Eigen::Vector3d ecef_position;
+        ecef_position(0) = (N + alt) * cos(lat) * cos(lon);
+        ecef_position(1) = (N + alt) * cos(lat) * sin(lon);
+        ecef_position(2) = (N * (1.0 - e2) + alt) * sin(lat);
+        
+        // Convert ECEF to ENU
+        Eigen::Matrix3d R;
+        R << -sin(lon_ref_), cos(lon_ref_), 0,
+             -sin(lat_ref_) * cos(lon_ref_), -sin(lat_ref_) * sin(lon_ref_), cos(lat_ref_),
+             cos(lat_ref_) * cos(lon_ref_), cos(lat_ref_) * sin(lon_ref_), sin(lat_ref_);
+        
+        Eigen::Vector3d enu_position = R * (ecef_position - ecef_ref_position_);
+        
+        // Check if in tunnel (bad GPS data) - use estimated position
+        if (fabs(enu_position(0) - TUNNEL_X) < 1.0 && fabs(enu_position(1) - TUNNEL_Y) < 1.0) {
+            enu_position(0) = prev_enu_position_(0) + denu_position_(0);
+            enu_position(1) = prev_enu_position_(1) + denu_position_(1);
+            enu_position(2) = prev_enu_position_(2) + denu_position_(2);
+            ROS_DEBUG("In tunnel - using estimated position");
+        } else {
+            // Update displacement only when we have valid GPS data
+            denu_position_ = enu_position - prev_enu_position_;
+        }
+        
+        // Calculate speed and heading
+        double dt = 0.0;
+        double heading_angle = prev_heading_angle_;  // Default to previous heading
+        
+        if (!first_message_) {
+            dt = (curr_time - prev_time_).toSec();
+            
+            if (dt > 0.0) {
+                // Calculate speed
+                speed_ = sqrt(pow(denu_position_(0), 2) + pow(denu_position_(1), 2)) / dt;
+                
+                // Calculate heading angle when moving
+                if (speed_ > 0.3) {  // Only update heading when moving significantly
+                    heading_angle = atan2(denu_position_(0), denu_position_(1));
+                    
+                    // Adjust smoothing factor based on speed
+                    alpha_ = clamp(1.0 - speed_, 0.5, 0.9);
+                    
+                    // Apply smoothing filter
+                    heading_angle = alpha_ * prev_heading_angle_ + (1.0 - alpha_) * heading_angle;
+                    
+                    ROS_DEBUG("Speed: %.2f m/s, Heading: %.2f deg", 
+                              speed_, heading_angle * 180.0 / M_PI);
+                }
+            }
+        } else {
+            first_message_ = false;
+        }
+        
+        // Create and publish odometry message
+        nav_msgs::Odometry odom_msg;
+        odom_msg.header.stamp = curr_time;
+        odom_msg.header.frame_id = "gps_odom";
+        odom_msg.child_frame_id = "gps";
+        
+        // Set position
+        odom_msg.pose.pose.position.x = enu_position(0);
+        odom_msg.pose.pose.position.y = enu_position(1);
+        odom_msg.pose.pose.position.z = enu_position(2);
+        
+        // Set orientation
+        tf::Quaternion q;
+        q.setRPY(0, 0, heading_angle);
+        tf::quaternionTFToMsg(q, odom_msg.pose.pose.orientation);
+        
+        // Set velocity if we have valid time difference
+        if (dt > 0.0) {
+            odom_msg.twist.twist.linear.x = denu_position_(0) / dt;
+            odom_msg.twist.twist.linear.y = denu_position_(1) / dt;
+            odom_msg.twist.twist.linear.z = denu_position_(2) / dt;
+            odom_msg.twist.twist.angular.z = (heading_angle - prev_heading_angle_) / dt;
+        } else {
+            // Zero velocity for first message or time issues
+            odom_msg.twist.twist.linear.x = 0.0;
+            odom_msg.twist.twist.linear.y = 0.0;
+            odom_msg.twist.twist.linear.z = 0.0;
+            odom_msg.twist.twist.angular.z = 0.0;
+        }
+        
+        // Publish odometry message
+        odom_pub_.publish(odom_msg);
+        
+        // Broadcast transform
+        tf::Transform transform;
+        transform.setOrigin(tf::Vector3(enu_position(0), enu_position(1), enu_position(2)));
+        transform.setRotation(q);
+        tf_broadcaster_.sendTransform(
+            tf::StampedTransform(transform, curr_time, "gps_odom", "gps"));
+        
+        // Update previous values for next iteration
+        prev_enu_position_ = enu_position;
+        prev_time_ = curr_time;
+        prev_heading_angle_ = heading_angle;
+    }
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "gps_odom");
-    FrontRearNode front_rear;
-    ros::spin(); 
+    ros::init(argc, argv, "gps_odometer");
+    GpsOdometer gps_odometer;
+    ros::spin();
     return 0;
 }
