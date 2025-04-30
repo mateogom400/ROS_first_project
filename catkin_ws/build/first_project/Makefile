@@ -1022,6 +1022,48 @@ odometer/fast:
 	cd /home/robotics/catkin_ws/build && $(MAKE) -f first_project/CMakeFiles/odometer.dir/build.make first_project/CMakeFiles/odometer.dir/build
 .PHONY : odometer/fast
 
+# Convenience name for target.
+first_project/CMakeFiles/gps_odometer.dir/rule:
+	cd /home/robotics/catkin_ws/build && $(MAKE) -f CMakeFiles/Makefile2 first_project/CMakeFiles/gps_odometer.dir/rule
+.PHONY : first_project/CMakeFiles/gps_odometer.dir/rule
+
+# Convenience name for target.
+gps_odometer: first_project/CMakeFiles/gps_odometer.dir/rule
+
+.PHONY : gps_odometer
+
+# fast build rule for target.
+gps_odometer/fast:
+	cd /home/robotics/catkin_ws/build && $(MAKE) -f first_project/CMakeFiles/gps_odometer.dir/build.make first_project/CMakeFiles/gps_odometer.dir/build
+.PHONY : gps_odometer/fast
+
+src/gps_odometer.o: src/gps_odometer.cpp.o
+
+.PHONY : src/gps_odometer.o
+
+# target to build an object file
+src/gps_odometer.cpp.o:
+	cd /home/robotics/catkin_ws/build && $(MAKE) -f first_project/CMakeFiles/gps_odometer.dir/build.make first_project/CMakeFiles/gps_odometer.dir/src/gps_odometer.cpp.o
+.PHONY : src/gps_odometer.cpp.o
+
+src/gps_odometer.i: src/gps_odometer.cpp.i
+
+.PHONY : src/gps_odometer.i
+
+# target to preprocess a source file
+src/gps_odometer.cpp.i:
+	cd /home/robotics/catkin_ws/build && $(MAKE) -f first_project/CMakeFiles/gps_odometer.dir/build.make first_project/CMakeFiles/gps_odometer.dir/src/gps_odometer.cpp.i
+.PHONY : src/gps_odometer.cpp.i
+
+src/gps_odometer.s: src/gps_odometer.cpp.s
+
+.PHONY : src/gps_odometer.s
+
+# target to generate assembly for a file
+src/gps_odometer.cpp.s:
+	cd /home/robotics/catkin_ws/build && $(MAKE) -f first_project/CMakeFiles/gps_odometer.dir/build.make first_project/CMakeFiles/gps_odometer.dir/src/gps_odometer.cpp.s
+.PHONY : src/gps_odometer.cpp.s
+
 src/odometer.o: src/odometer.cpp.o
 
 .PHONY : src/odometer.o
@@ -1119,6 +1161,10 @@ help:
 	@echo "... tf2_msgs_generate_messages_cpp"
 	@echo "... dynamic_reconfigure_generate_messages_lisp"
 	@echo "... odometer"
+	@echo "... gps_odometer"
+	@echo "... src/gps_odometer.o"
+	@echo "... src/gps_odometer.i"
+	@echo "... src/gps_odometer.s"
 	@echo "... src/odometer.o"
 	@echo "... src/odometer.i"
 	@echo "... src/odometer.s"

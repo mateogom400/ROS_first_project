@@ -1,187 +1,144 @@
-//copy from mateo's first node
 #include "ros/ros.h"
-#include "geometry_msgs/PointStamped.h"
+#include "sensor_msgs/NavSatFix.h"
 #include "nav_msgs/Odometry.h"
 #include <tf/transform_broadcaster.h>
+#include <Eigen/Dense>
 #include <cmath>
-#include <sensor_msgs/NavSatFix.h>
 
-// Vehicle parameters
-const double WHEELBASE = 1.765; // Front-to-rear wheel distance (meters)
-const double STEERING_FACTOR = 32.0; // Steering factor
-
-// Global variables for odometry computation
-double x = 0.0, y = 0.0, z =0.0, theta = 0.0; // Pose (x, y, theta)
-double delta_x = 0.0, delta_y = 0.0;
-double prev_x = 0.0, prev_y = 0.0;
-double a = 6378137, b =6356752, e_squared = 1-pow(b,2)/pow(a,2); //semi major and semi minor axis of the earth and eccentricity
-ros::Time prev_time; // Previous timestamp
-
-// Origin coordinates and ECEF reference point
-double origin_latitude = 0.0, origin_longitude = 0.0, origin_altitude = 0.0;
-double x_origin = 0.0, y_origin = 0.0, z_origin = 0.0;
-int i = 0;
-double prev_prev_x = 0.0, prev_prev_y = 0.0;
-double prev_theta = 0.0;
-
-class FrontRearNode {
+class GpsOdometer {
 private:
-    // Subscribers for the front and rear GPS topics
-    ros::Subscriber front_gps_sub_;
-    //ros::Subscriber rear_gps_sub_;
-
-    // Publisher for the odometry topic
+    ros::Subscriber gps_sub_;
     ros::Publisher odom_pub_;
-
-    // Transform broadcaster
     tf::TransformBroadcaster tf_broadcaster_;
 
-    // Latest received messages from the subscribed topics
-    sensor_msgs::NavSatFix front_gps_msg_;
-    //sensor_msgs::NavSatFix rear_gps_msg_;
-    tf::Quaternion tf_quat;
-    tf::Transform transform;
-    ros::NodeHandle nh;
+    // WGS84 parameters
+    const double a_ = 6378137.0;       // Semi-major axis [m]
+    const double b_ = 6356752.0;       // Semi-minor axis [m]
+    const double e2_ = 1 - (b_*b_)/(a_*a_);  // Square of eccentricity
+
+    // Reference point
+    double lat_ref_ = 0.0, lon_ref_ = 0.0, alt_ref_ = 0.0;
+    double x_ref_ecef_ = 0.0, y_ref_ecef_ = 0.0, z_ref_ecef_ = 0.0;
+    bool ref_initialized_ = false;
+
+    // State variables
+    Eigen::Vector3d prev_enu_ = Eigen::Vector3d::Zero();
+    double prev_heading_ = 0.0;
+    ros::Time prev_time_;
+    bool first_message_ = true;
+
+    double N_lat(double lat) {
+        return a_ / sqrt(1 - e2_ * pow(sin(lat), 2));
+    }
+
+    void llaToEcef(double lat, double lon, double alt, 
+                  double& x, double& y, double& z) {
+        double N = N_lat(lat);
+        x = (N + alt) * cos(lat) * cos(lon);
+        y = (N + alt) * cos(lat) * sin(lon);
+        z = (N * (1 - e2_) + alt) * sin(lat);
+    }
+
 public:
-    FrontRearNode() {
-        // Initialize subscribers and publishers
-        front_gps_sub_ = nh.subscribe("/swiftnav/front/gps_pose", 1, &FrontRearNode::frontGpsCallback, this); 
-        odom_pub_ = nh.advertise<nav_msgs::Odometry>("/odom", 10); 
-        //rear_gps_sub_ = nh.subscribe("/swiftnav/rear/gps_pose", 1, &FrontRearNode::rearGpsCallback, this);
+    GpsOdometer() {
+        ros::NodeHandle nh;
+        gps_sub_ = nh.subscribe("/swiftnav/front/gps_pose", 10, &GpsOdometer::gpsCallback, this);
+        odom_pub_ = nh.advertise<nav_msgs::Odometry>("/gps_odom", 10);
+
+        // Load reference point from ROS params
+        nh.param("/lat_r", lat_ref_, 0.0);
+        nh.param("/lon_r", lon_ref_, 0.0);
+        nh.param("/alt_r", alt_ref_, 0.0);
+
+        // Convert to radians and compute ECEF reference
+        double lat_rad = lat_ref_ * M_PI/180.0;
+        double lon_rad = lon_ref_ * M_PI/180.0;
+        llaToEcef(lat_rad, lon_rad, alt_ref_, x_ref_ecef_, y_ref_ecef_, z_ref_ecef_);
+        ref_initialized_ = true;
+        ROS_INFO("Reference point initialized");
     }
 
+    void gpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
+        if (!ref_initialized_) return;
 
+        // Convert current GPS to ECEF
+        double lat = msg->latitude * M_PI/180.0;
+        double lon = msg->longitude * M_PI/180.0;
+        double alt = msg->altitude;
+        double x_ecef, y_ecef, z_ecef;
+        llaToEcef(lat, lon, alt, x_ecef, y_ecef, z_ecef);
 
-void frontGpsCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) { 
-    //extract data from the message
-    double front_latitude = msg->latitude * M_PI/180; // Convert latitude to radians
-    double front_longitude = msg->longitude * M_PI/180; // Convert longitude to radians
-    double front_altitude = msg->altitude; // Altitude is a linear measurement, no conversion needed
-    ros::Time current_time = msg->header.stamp;
-    if (prev_time.isZero()) {
-        // Initialize the origin
-        origin_latitude = front_latitude;
-        origin_longitude = front_longitude;
-        origin_altitude = front_altitude;
-        double N = a / (sqrt(1 - e_squared * pow(sin(origin_latitude), 2)));
-        x_origin = (N + origin_altitude) * cos(origin_latitude) * cos(origin_longitude);
-        y_origin = (N + origin_altitude) * sin(origin_longitude) * cos(origin_latitude);
-        z_origin = (N * (1-e_squared) + origin_altitude) * sin(origin_latitude)*0;
-        // return;
+        // ECEF to ENU conversion
+        double dx = x_ecef - x_ref_ecef_;
+        double dy = y_ecef - y_ref_ecef_;
+        double dz = z_ecef - z_ref_ecef_;
+
+        double sin_lon = sin(lon_ref_ * M_PI/180.0);
+        double cos_lon = cos(lon_ref_ * M_PI/180.0);
+        double sin_lat = sin(lat_ref_ * M_PI/180.0);
+        double cos_lat = cos(lat_ref_ * M_PI/180.0);
+
+        Eigen::Vector3d enu;
+        enu << -sin_lon * dx + cos_lon * dy,
+               -sin_lat * cos_lon * dx - sin_lat * sin_lon * dy + cos_lat * dz,
+               cos_lat * cos_lon * dx + cos_lat * sin_lon * dy + sin_lat * dz;
+
+        // Handle outliers (e.g., tunnels)
+        if (enu.head<2>().norm() < 1e-6 || (enu - prev_enu_).norm() > 10.0) {
+            enu = prev_enu_;
+            ROS_WARN_THROTTLE(1, "GPS outlier detected! Using last valid position.");
+        }
+
+        // Compute speed and heading
+        ros::Time curr_time = ros::Time::now();
+        double dt = (curr_time - prev_time_).toSec();
+        double heading = prev_heading_;
+
+        if (dt > 0.001) {  // Valid timestep
+            Eigen::Vector2d delta_xy = enu.head<2>() - prev_enu_.head<2>();
+            double speed = delta_xy.norm() / dt;
+
+            if (speed > 0.3) {  // Only update heading if moving
+                double raw_heading = atan2(delta_xy[1], delta_xy[0]);
+                double alpha = std::max(0.5, std::min(0.9, 1.0 - speed));
+                heading = alpha * prev_heading_ + (1 - alpha) * raw_heading;
+            }
+        }
+
+        // Publish odometry
+        nav_msgs::Odometry odom_msg;
+        odom_msg.header.stamp = msg->header.stamp;
+        odom_msg.header.frame_id = "odom";
+        odom_msg.child_frame_id = "gps";
+        odom_msg.pose.pose.position.x = enu[0];
+        odom_msg.pose.pose.position.y = enu[1];
+        odom_msg.pose.pose.position.z = enu[2];
+        odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(heading);
+
+        if (dt > 0.001) {
+            odom_msg.twist.twist.linear.x = (enu[0] - prev_enu_[0]) / dt;
+            odom_msg.twist.twist.linear.y = (enu[1] - prev_enu_[1]) / dt;
+        }
+        odom_pub_.publish(odom_msg);
+
+        // Broadcast TF
+        tf::Transform transform;
+        transform.setOrigin(tf::Vector3(enu[0], enu[1], enu[2]));
+        tf::Quaternion q;
+        q.setRPY(0, 0, heading);
+        transform.setRotation(q);
+        tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "gps"));
+
+        // Update state
+        prev_enu_ = enu;
+        prev_heading_ = heading;
+        prev_time_ = curr_time;
     }
-
-    // Convert latitude-longitude to ECEF coordinates
-    double N = a/(sqrt(1-e_squared*pow((sin(front_latitude)),2)));
-    double x_ecef = (N + front_altitude) * cos(front_latitude) * cos(front_longitude);
-    double y_ecef = (N + front_altitude) * sin(front_longitude) * cos(front_latitude);
-    double z_ecef = (N * (1-e_squared) + front_altitude) * sin(front_latitude)*0;
-
-    if (i>=2){
-        prev_prev_x = prev_x;
-        prev_prev_y = prev_y;
-    }
-    prev_x = x;
-    prev_y = y;
-
-    //convert latitude-longitude to ENU coordinates
-    x = -sin(origin_longitude) * (x_ecef - x_origin) + cos(origin_longitude) * (y_ecef - y_origin);
-    y = -sin(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) - sin(origin_longitude) * sin(origin_latitude) * (y_ecef - y_origin) + cos(origin_latitude) * (z_ecef - z_origin);
-    z = cos(origin_latitude) * cos(origin_longitude) * (x_ecef - x_origin) + cos(origin_latitude) * sin(origin_longitude) * (y_ecef - y_origin) + sin(origin_latitude) * (z_ecef - z_origin);
-    // x = x/100;
-    // y = y/100;
-    z = 0;
-
-    // Compute angular velocity (bicycle model)
-    //double angular_velocity = (speed_mps / WHEELBASE) * tan(wheel_angle_rad);
-
-    // Calculate time difference
-    if (prev_time.isZero()) {
-        prev_time = current_time;
-        return;
-    }
-    double dt = (current_time - prev_time).toSec();
-    prev_time = current_time;
-
-    // Update pose using Euler integration //(we don't need that?)
-    //x += speed_mps * cos(theta) * dt;
-    //y += speed_mps * sin(theta) * dt;
-    //theta += angular_velocity * dt;
-
-    //static tf::TransformBroadcaster tf_broadcaster;
-
-    nav_msgs::Odometry odom_msg;
-    odom_msg.header.stamp = current_time;
-    odom_msg.header.frame_id = "odom";
-    odom_msg.child_frame_id = "vehicle";
-
-    // Set position
-    odom_msg.pose.pose.position.x = x;
-    odom_msg.pose.pose.position.y = y;
-    odom_msg.pose.pose.position.z = z; // 2D assumption but we have altitude infos so okayyyy
-    if (prev_time.isZero()) {
-        delta_x = 0;
-        delta_y = 0;
-        return;
-    }else{
-        delta_x = x - prev_x;
-        delta_y = y - prev_y;
-    }
-    //prev_theta = theta;
-    theta = atan2(delta_y, delta_x); // Compute theta from delta_x and delta_y
-
-    if (x < -500000 || y < -500000){
-        //double dp = sqrt(pow(prev_x-prev_prev_x,2) + pow(prev_y - prev_prev_y,2));
-        double dx = prev_x - prev_prev_x
-        double dy = prev_y - prev_prev_y;
-        //x = prev_x + dp*cos(prev_theta);
-        //y = prev_y + dp*sin(prev_theta);
-        x = prev_x + dx;
-        y = prev_y + dy;
-        odom_msg.pose.pose.position.x = x;
-        odom_msg.pose.pose.position.y = y;
-
-        //delta_x = dp*cos(prev_theta);
-        //delta_y = dp*sin(prev_theta);
-        //theta = atan2(delta_y, delta_x);
-        theta = prev_theta;
-    }
-    // Compute quaternion using setRPY (roll=0, pitch=0, yaw=theta)
-    
-    // //Update the transform's origin with the new pose
-    // transform_.setOrigin(tf::Vector3(x, y, z));
-    // //Transform to Vehicle frame via tf
-    // transform_.setRotation(tf_quat);
-    // // Publish the updated transform
-    // tf_broadcaster_.sendTransform(tf::StampedTransform(transform_, current_time, "odom", "vehicle"));
-        // Broadcast TF transform (odom → vehicle)
-    transform.setOrigin(tf::Vector3(x, y, z));
-    tf_quat.setRPY(0, 0, theta); 
-    transform.setRotation(tf_quat); // Reuse the same quaternion
-    //geometry_msgs::Quaternion odom_quat;
-    //tf::quaternionTFToMsg(tf_quat, odom_quat); // Convert to geometry_msgs
-    odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(theta); // Set orientation using yaw angle
-
-
-    
-    // Set velocity //(should we set it?)
-    //odom_msg.twist.twist.linear.x = speed_mps;
-    //odom_msg.twist.twist.angular.z = angular_velocity;
-
-    // if (!odom_pub) {
-    //     ros::NodeHandle nh;
-    //     odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
-    // }
-    odom_pub_.publish(odom_msg);
-    // Publish the transform
-    tf_broadcaster_.sendTransform(tf::StampedTransform(transform, current_time, "odom", "vehicle"));
-    //tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "vehicle"));
-    i++;
-  }
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "gps_odom");
-    FrontRearNode front_rear;
-    ros::spin(); 
+    ros::init(argc, argv, "gps_odometer");
+    GpsOdometer gps_odom;
+    ros::spin();
     return 0;
 }

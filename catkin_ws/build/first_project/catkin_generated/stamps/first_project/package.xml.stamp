@@ -18,8 +18,9 @@
   <build_depend>message_filters</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>message_runtime</build_depend> 
-  <build_depend>std_msgs</build_depend> 
-  <!-- <build_depend>cmath</build_depend> -->
+  <build_depend>std_msgs</build_depend>
+  <build_depend>cmath</build_depend>
+
 
   <!-- Build Export dependencies -->
   <build_export_depend>roscpp</build_export_depend>
@@ -32,6 +33,7 @@
   <build_export_depend>message_generation</build_export_depend>
   <build_export_depend>message_runtime</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>cmath</build_export_depend>
 
   <!-- Run-time dependencies -->
   <exec_depend>roscpp</exec_depend>
@@ -44,7 +46,7 @@
   <exec_depend>message_generation</exec_depend>
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>std_msgs</exec_depend>
-  <!-- <exec_depend>cmath</exec_depend> -->
+  <exec_depend>cmath</exec_depend>
 
   <!-- Exported information -->
   <export>
