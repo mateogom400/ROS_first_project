@@ -17,6 +17,7 @@ set(CMAKE_TARGET_DEFINITIONS_CXX
 
 # The include file search paths:
 set(CMAKE_CXX_TARGET_INCLUDE_PATH
+  "/home/robotics/catkin_ws/devel/include"
   "/usr/include/eigen3"
   "/home/robotics/catkin_ws/src/first_project/include"
   "/opt/ros/noetic/include"

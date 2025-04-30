@@ -17,11 +17,20 @@ message_generation
 std_msgs
 )
 
+add_message_files(
+  FILES
+  sector_time.msg
+)
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
+
 # Declare the catkin package
 catkin_package(
   #INCLUDE_DIRS include
   #LIBRARIES first_project
-  #CATKIN_DEPENDS message_runtime 
+  CATKIN_DEPENDS message_runtime 
 )
 
 # Include directories
@@ -32,7 +41,7 @@ include_directories(include ${catkin_INCLUDE_DIRS}
 #add_executable(odometer src/odom_pub.cpp src/odom_sub.cpp)
 add_executable(odometer src/odometer.cpp )
 add_executable(gps_odometer src/gps_odometer.cpp )
-#add_executable(sector_time src/sector_time_pub.cpp src/sector_time_sub.cpp)
+add_executable(sector_times src/sector_times.cpp)
 
 #Link the executables with the required libraries
 target_link_libraries(odometer
@@ -43,6 +52,9 @@ target_link_libraries(gps_odometer
   ${catkin_LIBRARIES}
 )
 
+target_link_libraries(sector_times
+   ${catkin_LIBRARIES}
+ )
 # target_link_libraries(sector_time
 #   ${catkin_LIBRARIES}
 # )

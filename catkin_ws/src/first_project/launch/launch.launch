@@ -8,7 +8,10 @@
         <param name="lon_r" value="9.281178887031235" />
         <param name="alt_r" value="229.04906147731415" />
     </node>
+
+    <node name="sector_times" pkg="first_project" type="sector_times" output="screen" />
+
    
     <!-- Separate RViz node -->
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find first_project)/config/RVIZ_CONFIG.rviz"/>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find first_project)/config/config.rviz"/>
 </launch>

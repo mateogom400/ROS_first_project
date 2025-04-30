@@ -217,7 +217,7 @@ public:
         // Create and publish odometry message
         nav_msgs::Odometry odom_msg;
         odom_msg.header.stamp = curr_time;
-        odom_msg.header.frame_id = "gps_odom";
+        odom_msg.header.frame_id = "odom";
         odom_msg.child_frame_id = "gps";
         
         // Set position
@@ -252,7 +252,7 @@ public:
         transform.setOrigin(tf::Vector3(enu_position(0), enu_position(1), enu_position(2)));
         transform.setRotation(q);
         tf_broadcaster_.sendTransform(
-            tf::StampedTransform(transform, curr_time, "gps_odom", "gps"));
+            tf::StampedTransform(transform, curr_time, "odom", "gps"));
         
         // Update previous values for next iteration
         prev_enu_position_ = enu_position;
